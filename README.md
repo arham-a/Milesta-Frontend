@@ -1,85 +1,127 @@
-# Navigoo | Navigate & Achieve Goals (Client)
+# Milesta
 
-Navigoo is an interactive, clean, and minimalist goal navigation and timeline planner. It enables users to design visual learning paths, track milestones, schedule deadlines, and manage tasks seamlessly in a beautiful interface.
+Turn a goal into a plan you'll actually follow. Milesta is the client for a goal-planning app where you build (or AI-generate) a roadmap, break it into milestones, check things off as you go, and optionally borrow — "fork" — a roadmap someone else already proved out.
 
-## Features
+This is the Next.js frontend. It talks to the [Milesta API](../timeline-app-backend-main) for everything except AI copy generation for ad-hoc segments, which is handled by a local route in this app.
 
-- **Page-Based Routing (Next.js App Router)**: Fully shareable, REST-style URLs for all workspace areas:
-  - `/` - Dynamic public landing page.
-  - `/login` - Auth gateway page (supports email login/signup modes).
-  - `/dashboard` - Personal user workspace displaying all active timelines.
-  - `/dashboard/timeline/[id]` - Milestones tracking board and chronological roadmaps.
-  - `/explore` - Discovery hub to browse and fork community-curated learning roadmaps.
-  - `/settings` - Custom look-and-feel configuration (Emerald, Indigo, Slate themes).
-  - `/user/account` - User profile, history avatar uploads, and account details.
-- **AI-Powered Generation**: Leverage Gemini to instantly draft complete curricular paths based on title and description.
-- **Standalone Production Compilation**: Fully configured Next.js `standalone` trace output for lightweight production containerization.
-- **Session Auto-Restore & Auth Guards**: Global context wrapper intercepts `401 Unauthorized` responses to seamlessly refresh JWT tokens on demand.
+## What you can do with it
 
-## Tech Stack
+- **Plan a goal two ways** — a fixed-cadence **Roadmap** (daily/weekly/monthly, set duration) or a free-form **Chronicle** of milestones with no schedule attached
+- **Generate a plan instead of building one** — describe the goal, domain, skill level, and audience, and get a full set of milestones with goals and reference links back
+- **Track progress** — check off goals inside a segment, mark a segment complete, or schedule it to a specific date
+- **Browse and fork public roadmaps** on the Explore page — copy someone else's plan into your account and make it yours
+- **Manage your account** — update your name, upload and switch between avatar photos
+- **Pick a theme** — Emerald, Indigo, or Slate, from Settings
 
-- **Framework**: Next.js 15 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS & CSS Modules
-- **Animation**: Framer Motion / Motion for React
-- **Icons**: Lucide React
-- **Context/State**: React Context API (TimelineProvider)
+## Pages
 
-## Getting Started
+| Route | What lives there |
+|---|---|
+| `/` | Public landing page |
+| `/login` | Sign in / sign up |
+| `/dashboard` | Your roadmaps and chronicles |
+| `/dashboard/timeline/[id]` | A single plan's milestone board |
+| `/explore` | Public roadmaps from the community, forkable |
+| `/settings` | Theme and preferences |
+| `/user/account` | Profile, avatar, account details |
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 |
+| Animation | Motion (Framer Motion successor) |
+| Icons | Lucide React |
+| State | React Context (`TimelineContext`) + `localStorage`-backed session |
+| AI | Google Gemini (`@google/genai`), called from a local API route |
+
+## Getting started
 
 ### Prerequisites
 
-- **Node.js**: `v18.x` or higher
-- **Package Manager**: `npm`
+- Node.js 18+
+- The [Milesta API](../timeline-app-backend-main) running somewhere reachable (defaults to `http://localhost:8000`)
 
-### Environment Setup
+### 1. Install dependencies
 
-Create a `.env.local` file in the client directory:
-
-```env
-# The URL of this Next.js app
-APP_URL="http://localhost:3000"
-
-# The endpoint pointing to the backend API server
-NEXT_PUBLIC_API_URL="http://localhost:8000"
-
-# Set to true to disable Webpack HMR in local development if needed
-DISABLE_HMR="false"
-```
-
-### Installation
-
-1. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Run the local development server:
+### 2. Configure environment
+
+Copy `.env.example` to `.env.local`:
+
+```env
+# Where the Milesta API is running
+NEXT_PUBLIC_API_URL="http://localhost:8000"
+
+# Optional — enables AI segment generation from a text prompt.
+# Without it, generation silently falls back to a local template generator, so the app stays fully usable.
+GEMINI_API_KEY=""
+
+# The public URL of this app itself (used for self-referential links)
+APP_URL="http://localhost:3000"
+
+# Disable Webpack HMR if it's causing issues in your environment
+DISABLE_HMR="false"
+```
+
+### 3. Run it
+
 ```bash
 npm run dev
 ```
 
-3. Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000). If the API isn't reachable, most read paths quietly fall back to a local mock dataset (`services/mockData.ts`) so the UI still renders — but writes need a live backend.
 
-## Production Build
+## Project layout
 
-To compile a production build:
+```
+app/
+├── page.tsx                          # Landing page
+├── login/page.tsx                    # Auth gateway
+├── (app)/                            # Authenticated shell (sidebar + header)
+│   ├── dashboard/page.tsx
+│   ├── dashboard/timeline/[id]/page.tsx
+│   ├── explore/page.tsx
+│   ├── settings/page.tsx
+│   └── user/account/page.tsx
+└── api/segments/generate/route.ts    # Gemini-backed AI generation, with local fallback
+
+components/     # One component per page/section (LandingPage, DashboardTab, ExploreTab, ...)
+hooks/          # TimelineContext — the single source of truth for session + data state
+services/       # timelineService.ts (backend client) + mockData.ts (offline fallback)
+types/          # Shared TypeScript types for timelines and segments
+```
+
+## How auth works here
+
+The client stores a JWT in `localStorage` and attaches it to every request. If the API responds `401`, `fetchWithAuth` (in `services/timelineService.ts`) transparently calls `/api/auth/refresh` and retries the original request once — concurrent requests during a refresh are queued and replayed rather than each triggering their own refresh call.
+
+## Production build
+
 ```bash
 npm run build
 ```
 
-The build is configured to compile in **standalone mode** (see `next.config.ts`), generating `.next/standalone` which gathers only the necessary files for server execution.
+This compiles in Next's `standalone` output mode (`next.config.ts`), producing a `.next/standalone` folder with only what's needed to run the server — no full `node_modules` required in the deploy image.
 
-## Docker Setup
+## Docker
 
-To build and run the production standalone container:
-
-1. Build the Docker image:
 ```bash
-docker build -t navigoo-client .
+docker build -t milesta-client .
+docker run -p 3000:3000 milesta-client
 ```
 
-2. Run the container:
-```bash
-docker run -p 3000:3000 navigoo-client
-```
+## Scripts
+
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm start` | Run the production build |
+| `npm run lint` | Lint the codebase |
+| `npm run clean` | Remove the `.next` build output |
